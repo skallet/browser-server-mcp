@@ -41,25 +41,33 @@
     (let [result (mcp/handle-method
                   "initialize"
                   {:protocolVersion "2025-03-26"}
-                  nil)]
+                  nil {})]
       (is (= "2025-03-26" (:protocolVersion result)))
       (is (= "browser-server-mcp" (get-in result [:serverInfo :name])))
       (is (get-in result [:capabilities :tools])))))
 
 (deftest test-handle-tools-list
-  (testing "returns tool schemas"
-    (let [result (mcp/handle-method "tools/list" {} nil)
+  (testing "returns 22 tools without captcha key"
+    (let [result (mcp/handle-method "tools/list" {} nil {})
           tools (:tools result)
           tool-names (set (map :name tools))]
       (is (contains? tool-names "navigate"))
       (is (contains? tool-names "screenshot"))
       (is (contains? tool-names "click"))
       (is (contains? tool-names "page_text"))
-      (is (= 22 (count tools))))))
+      (is (= 22 (count tools)))
+      (is (not (contains? tool-names "solve_captcha")))))
+
+  (testing "returns 23 tools with captcha key"
+    (let [result (mcp/handle-method "tools/list" {} nil {:captcha-api-key "k"})
+          tools (:tools result)
+          tool-names (set (map :name tools))]
+      (is (= 23 (count tools)))
+      (is (contains? tool-names "solve_captcha")))))
 
 (deftest test-handle-unknown-method
   (testing "returns error for unknown method"
-    (let [result (mcp/handle-method "unknown/method" {} nil)]
+    (let [result (mcp/handle-method "unknown/method" {} nil {})]
       (is (:error result))
       (is (= -32601 (get-in result [:error :code]))))))
 
@@ -67,7 +75,7 @@
   (testing "POST with initialize returns JSON response"
     (let [body (json/generate-string {:jsonrpc "2.0" :id 1 :method "initialize"
                                       :params {:protocolVersion "2025-03-26"}})
-          response (mcp/handle-http-post body nil (atom nil))]
+          response (mcp/handle-http-post body nil {} (atom nil))]
       (is (= 200 (:status response)))
       (is (str/includes? (get-in response [:headers "Content-Type"]) "application/json"))
       (let [parsed (json/parse-string (:body response) true)]
@@ -76,13 +84,13 @@
 
   (testing "POST with notification returns 202"
     (let [body (json/generate-string {:jsonrpc "2.0" :method "notifications/initialized"})
-          response (mcp/handle-http-post body nil (atom nil))]
+          response (mcp/handle-http-post body nil {} (atom nil))]
       (is (= 202 (:status response)))))
 
   (testing "POST with session id tracking"
     (let [body (json/generate-string {:jsonrpc "2.0" :id 1 :method "initialize"
                                       :params {:protocolVersion "2025-03-26"}})
-          response (mcp/handle-http-post body nil (atom nil))
+          response (mcp/handle-http-post body nil {} (atom nil))
           session-id (get-in response [:headers "Mcp-Session-Id"])]
       (is (some? session-id)))))
 

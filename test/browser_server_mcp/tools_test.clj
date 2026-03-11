@@ -5,12 +5,18 @@
             [browser-server-mcp.tools :as tools]))
 
 (deftest test-tool-schemas
-  (testing "returns 22 tool schemas"
-    (let [schemas (tools/tool-schemas)]
-      (is (= 22 (count schemas)))))
+  (testing "returns 22 tool schemas without captcha key"
+    (let [schemas (tools/tool-schemas {})]
+      (is (= 22 (count schemas)))
+      (is (not (some #(= "solve_captcha" (:name %)) schemas)))))
+
+  (testing "returns 23 tool schemas with captcha key"
+    (let [schemas (tools/tool-schemas {:captcha-api-key "test-key"})]
+      (is (= 23 (count schemas)))
+      (is (some #(= "solve_captcha" (:name %)) schemas))))
 
   (testing "all schemas have required fields"
-    (doseq [schema (tools/tool-schemas)]
+    (doseq [schema (tools/tool-schemas {:captcha-api-key "test-key"})]
       (is (string? (:name schema)) (str "missing name in " schema))
       (is (string? (:description schema)) (str "missing description in " (:name schema)))
       (is (map? (:inputSchema schema)) (str "missing inputSchema in " (:name schema))))))

@@ -36,6 +36,12 @@
                                                          (println (str "Error: invalid port number: " val))
                                                          (System/exit 1)))]
                                        (recur (drop 2 remaining) (assoc opts :port parsed)))))
+                      "--captcha-api-key"
+                      (let [val (second remaining)]
+                        (if (or (nil? val) (str/starts-with? val "--"))
+                          (do (println "Error: --captcha-api-key requires an argument")
+                              (System/exit 1))
+                          (recur (drop 2 remaining) (assoc opts :captcha-api-key val))))
                       (do (println (str "Unknown option: " (first remaining)))
                           (System/exit 1)))))
         "stop"   {:command :stop}
@@ -86,15 +92,17 @@
   (println "Usage: browser-server-mcp <command> [options]")
   (println)
   (println "Commands:")
-  (println "  start [--headed] [--port PORT]   Start browser MCP server")
-  (println "  stop                             Stop running instance")
+  (println "  start [options]   Start browser MCP server")
+  (println "  stop              Stop running instance")
   (println)
   (println "Options:")
-  (println "  --headed     Show browser window (default: headless)")
-  (println "  --port PORT  Server port (default: 7117)")
-  (println "  --help, -h   Show this help"))
+  (println "  --headed                Show browser window (default: headless)")
+  (println "  --port PORT             Server port (default: 7117)")
+  (println "  --captcha-api-key KEY   2captcha.com API key for solve_captcha tool")
+  (println "                          (or set CAPTCHA_API_KEY env var)")
+  (println "  --help, -h              Show this help"))
 
-(defn start-server! [{:keys [headless port]}]
+(defn start-server! [{:keys [headless port captcha-api-key]}]
   (require '[etaoin.api :as e]
            '[browser-server-mcp.mcp :as mcp])
 
@@ -105,9 +113,14 @@
     (System/exit 1))
 
   (let [chrome-fn (resolve 'etaoin.api/chrome)
-        driver (if headless (chrome-fn {:headless true}) (chrome-fn))]
+        driver (if headless (chrome-fn {:headless true}) (chrome-fn))
+        resolved-captcha-key (or captcha-api-key (System/getenv "CAPTCHA_API_KEY"))
+        server-opts (cond-> {:port port :host "127.0.0.1"}
+                      resolved-captcha-key (assoc :captcha-api-key resolved-captcha-key))]
+    (when resolved-captcha-key
+      (println "Captcha solving enabled (2captcha.com)"))
     (try
-      (let [server-info ((resolve 'browser-server-mcp.mcp/start-server!) driver {:port port :host "127.0.0.1"})]
+      (let [server-info ((resolve 'browser-server-mcp.mcp/start-server!) driver server-opts)]
 
         ;; Write discovery files
         (write-discovery-files! port)

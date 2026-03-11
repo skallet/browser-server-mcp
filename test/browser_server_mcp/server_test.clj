@@ -23,7 +23,16 @@
     (let [opts (server/parse-args ["start" "--headed" "--port" "9090"])]
       (is (= :start (:command opts)))
       (is (= false (:headless opts)))
-      (is (= 9090 (:port opts))))))
+      (is (= 9090 (:port opts)))))
+
+  (testing "start --captcha-api-key"
+    (let [opts (server/parse-args ["start" "--captcha-api-key" "abc123"])]
+      (is (= :start (:command opts)))
+      (is (= "abc123" (:captcha-api-key opts)))))
+
+  (testing "start without captcha key has no key"
+    (let [opts (server/parse-args ["start"])]
+      (is (nil? (:captcha-api-key opts))))))
 
 (deftest test-parse-args-stop
   (testing "stop command"

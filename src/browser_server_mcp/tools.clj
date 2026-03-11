@@ -70,8 +70,15 @@
   {:ref {:type "string" :description "Element ref from query/query_all"}
    :selector {:type "string" :description "CSS selector or XPath expression"}})
 
-(defn tool-schemas []
-  [{:name "navigate"
+(def ^:private solve-captcha-schema
+  {:name "solve_captcha"
+   :description "Solve a captcha on the current page using 2captcha.com. Auto-detects reCAPTCHA v2 and hCaptcha. For image captchas, provide the selector for the captcha image element. Returns the solution text for image captchas."
+   :inputSchema {:type "object"
+                 :properties {:type {:type "string" :description "Captcha type: recaptcha_v2, hcaptcha, or image. Auto-detected if omitted."}
+                              :selector {:type "string" :description "CSS/XPath for image captcha element (required when type=image)"}}}})
+
+(defn tool-schemas [server-config]
+  (cond-> [{:name "navigate"
     :description "Navigate to a URL"
     :inputSchema {:type "object"
                   :properties {:url {:type "string" :description "URL to navigate to"}}
@@ -178,7 +185,8 @@
     :description "Execute JavaScript in the browser. Use 'return' to get a value back. This is the escape hatch for anything not covered by dedicated tools."
     :inputSchema {:type "object"
                   :properties {:script {:type "string" :description "JavaScript code to execute"}}
-                  :required ["script"]}}])
+                  :required ["script"]}}]
+    (:captcha-api-key server-config) (conj solve-captcha-schema)))
 
 (defn- url+title [driver]
   (pr-str {:url (e/get-url driver) :title (e/get-title driver)}))
@@ -382,6 +390,17 @@
   (e/back driver)
   (success (url+title driver)))
 
+(defn- do-solve-captcha [driver server-config args]
+  (require '[browser-server-mcp.captcha :as captcha])
+  (let [result ((resolve 'browser-server-mcp.captcha/solve-captcha!)
+                driver
+                {:api-key (:captcha-api-key server-config)
+                 :type (:type args)
+                 :selector (:selector args)})]
+    (if (:error result)
+      (error (:error result))
+      (success (:ok result)))))
+
 (def ^:private tool-handlers
   {"navigate"      do-navigate
    "back"          do-back
@@ -404,7 +423,8 @@
    "scroll"        do-scroll
    "screenshot"    do-screenshot
    "resize"        do-resize
-   "execute_js"    do-execute-js})
+   "execute_js"    do-execute-js
+   "solve_captcha" do-solve-captcha})
 
 (defn- with-timeout
   "Run f with a timeout in ms. Returns f's result, or an error map on timeout.
@@ -420,15 +440,19 @@
 (defn call-tool
   "Execute a browser tool by name. Returns MCP tool result map.
    Arguments may have string or keyword keys; normalized to keywords internally."
-  [driver tool-name arguments]
+  [driver server-config tool-name arguments]
   (let [arguments (update-keys (or arguments {}) keyword)]
   (if-let [handler (get tool-handlers tool-name)]
     (try
       (let [timeout (case tool-name
                       "navigate" navigate-timeout
                       "wait"     (+ (or (:timeout_ms arguments) 10000) 5000)
+                      "solve_captcha" 180000
                       default-timeout)]
-        (with-timeout timeout #(handler driver arguments)))
+        (with-timeout timeout
+          #(if (= tool-name "solve_captcha")
+             (handler driver server-config arguments)
+             (handler driver arguments))))
       (catch Exception ex
         (error (str "Tool error: " (.getMessage ex)))))
     (error (str "Unknown tool: " tool-name)))))

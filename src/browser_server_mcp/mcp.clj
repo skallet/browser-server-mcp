@@ -21,13 +21,13 @@
 
 (defn tool-schemas
   "Return MCP tool schemas. Loaded from browser-server-mcp.tools namespace."
-  []
+  [server-config]
   (require '[browser-server-mcp.tools])
-  ((resolve 'browser-server-mcp.tools/tool-schemas)))
+  ((resolve 'browser-server-mcp.tools/tool-schemas) server-config))
 
 (defn handle-method
   "Dispatch a JSON-RPC method. Returns result map or error map."
-  [method params driver]
+  [method params driver server-config]
   (case method
     "initialize"
     {:protocolVersion "2025-03-26"
@@ -38,12 +38,12 @@
     nil
 
     "tools/list"
-    {:tools (tool-schemas)}
+    {:tools (tool-schemas server-config)}
 
     "tools/call"
     (do
       (require '[browser-server-mcp.tools])
-      ((resolve 'browser-server-mcp.tools/call-tool) driver (:name params) (:arguments params)))
+      ((resolve 'browser-server-mcp.tools/call-tool) driver server-config (:name params) (:arguments params)))
 
     {:error {:code -32601 :message (str "Method not found: " method)}}))
 
@@ -53,7 +53,7 @@
 (defn handle-http-post
   "Handle an MCP Streamable HTTP POST request.
    Returns a Ring-style response map."
-  [body-str driver session-id-atom]
+  [body-str driver server-config session-id-atom]
   (let [msg (parse-jsonrpc body-str)]
     (if (:error msg)
       {:status 400
@@ -63,7 +63,7 @@
       (let [is-request? (contains? msg :id)
             method (:method msg)
             params (or (:params msg) {})
-            result (handle-method method params driver)]
+            result (handle-method method params driver server-config)]
         (if is-request?
           (let [session-id (or @session-id-atom
                                (let [sid (generate-session-id)]
@@ -85,14 +85,14 @@
 
 (defn make-handler
   "Create a Ring handler for the MCP server."
-  [driver session-id-atom]
+  [driver server-config session-id-atom]
   (fn [req]
     (let [method (:request-method req)
           uri (:uri req)]
       (cond
         (and (= method :post) (= uri "/mcp"))
         (let [body (slurp (:body req))]
-          (handle-http-post body driver session-id-atom))
+          (handle-http-post body driver server-config session-id-atom))
 
         (and (= method :get) (= uri "/mcp"))
         {:status 405
@@ -116,11 +116,11 @@
 
 (defn start-server!
   "Start the MCP HTTP server. Returns the server instance."
-  [driver {:keys [port host]
+  [driver {:keys [port host] :as server-config
            :or {port 7117 host "127.0.0.1"}}]
   (require '[org.httpkit.server :as http])
   (let [session-id-atom (atom nil)
-        handler (make-handler driver session-id-atom)
+        handler (make-handler driver server-config session-id-atom)
         server ((resolve 'org.httpkit.server/run-server) handler {:port port :ip host})]
     {:server server
      :session-id-atom session-id-atom}))
