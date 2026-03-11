@@ -11,7 +11,7 @@ Standalone browser MCP server for Claude Code. Provides 22 browser automation to
 ## Install
 
 ```bash
-bbin install io.github.skall/browser-server-mcp
+bbin install io.github.skallet/browser-server-mcp
 ```
 
 ## Usage
