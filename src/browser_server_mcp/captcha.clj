@@ -16,8 +16,7 @@
   {:query-params {:key api-key
                   :method "userrecaptcha"
                   :googlekey sitekey
-                  :pageurl page-url
-                  :json 1}})
+                  :pageurl page-url}})
 
 (defmethod build-submit-params :hcaptcha
   [{:keys [api-key sitekey page-url user-agent]}]
@@ -88,7 +87,6 @@
    "(function() {"
    "  function findSitekey(obj, depth) {"
    "    if (!obj || depth > 5) return null;"
-   "    if (typeof obj === 'string' && obj.length > 10 && obj.length < 100) return obj;"
    "    if (typeof obj !== 'object') return null;"
    "    for (var k in obj) {"
    "      if (k === 'sitekey' || k === 'siteKey') {"
@@ -134,56 +132,55 @@
   "Returns JavaScript string to inject a captcha solution into the page.
    Returns nil for unsupported captcha types."
   [captcha-type solution]
-  (case captcha-type
-    :recaptcha_v2
-    (str
-     "(function() {"
-     "  var ta = document.querySelector('textarea[name=\"g-recaptcha-response\"]');"
-     "  if (ta) { ta.value = '" solution "'; ta.style.display = 'none'; }"
-     "  try {"
-     "    if (typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {"
-     "      var clients = ___grecaptcha_cfg.clients;"
-     "      for (var k in clients) {"
-     "        var c = clients[k];"
-     "        if (c && c.aa && typeof c.aa.callback === 'function') {"
-     "          c.aa.callback('" solution "'); return;"
-     "        }"
-     "        if (c) {"
-     "          for (var j in c) {"
-     "            var inner = c[j];"
-     "            if (inner && typeof inner === 'object') {"
-     "              for (var m in inner) {"
-     "                if (inner[m] && typeof inner[m].callback === 'function') {"
-     "                  inner[m].callback('" solution "'); return;"
-     "                }"
-     "              }"
-     "            }"
-     "          }"
-     "        }"
-     "      }"
-     "    }"
-     "  } catch(e) {}"
-     "})()")
+  (let [safe (json/generate-string solution)]
+    (case captcha-type
+      :recaptcha_v2
+      (str
+       "(function() {"
+       "  var sol = " safe ";"
+       "  var ta = document.querySelector('textarea[name=\"g-recaptcha-response\"]');"
+       "  if (ta) { ta.value = sol; ta.style.display = 'none'; }"
+       "  try {"
+       "    if (typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {"
+       "      var clients = ___grecaptcha_cfg.clients;"
+       "      function findCB(obj, depth) {"
+       "        if (!obj || depth > 3) return null;"
+       "        if (typeof obj !== 'object') return null;"
+       "        for (var k in obj) {"
+       "          if (k === 'callback' && typeof obj[k] === 'function') return obj[k];"
+       "          var r = findCB(obj[k], depth + 1);"
+       "          if (r) return r;"
+       "        }"
+       "        return null;"
+       "      }"
+       "      for (var k in clients) {"
+       "        var cb = findCB(clients[k], 0);"
+       "        if (cb) { cb(sol); return; }"
+       "      }"
+       "    }"
+       "  } catch(e) {}"
+       "})()")
 
-    :hcaptcha
-    (str
-     "(function() {"
-     "  var hta = document.querySelector('textarea[name=\"h-captcha-response\"]');"
-     "  if (hta) hta.value = '" solution "';"
-     "  var gta = document.querySelector('textarea[name=\"g-recaptcha-response\"]');"
-     "  if (gta) gta.value = '" solution "';"
-     "  try {"
-     "    var el = document.querySelector('.h-captcha[data-callback]');"
-     "    if (el) {"
-     "      var cbName = el.getAttribute('data-callback');"
-     "      if (cbName && typeof window[cbName] === 'function') {"
-     "        window[cbName]('" solution "');"
-     "      }"
-     "    }"
-     "  } catch(e) {}"
-     "})()")
+      :hcaptcha
+      (str
+       "(function() {"
+       "  var sol = " safe ";"
+       "  var hta = document.querySelector('textarea[name=\"h-captcha-response\"]');"
+       "  if (hta) hta.value = sol;"
+       "  var gta = document.querySelector('textarea[name=\"g-recaptcha-response\"]');"
+       "  if (gta) gta.value = sol;"
+       "  try {"
+       "    var el = document.querySelector('.h-captcha[data-callback]');"
+       "    if (el) {"
+       "      var cbName = el.getAttribute('data-callback');"
+       "      if (cbName && typeof window[cbName] === 'function') {"
+       "        window[cbName](sol);"
+       "      }"
+       "    }"
+       "  } catch(e) {}"
+       "})()")
 
-    nil))
+      nil)))
 
 ;; --- Orchestrator ---
 
@@ -215,30 +212,34 @@
         user-agent (js-execute driver "return navigator.userAgent")
         explicit-type (:type opts)
         detected   (when (not= explicit-type "image")
-                     (let [raw (js-execute driver detect-captcha-js)]
+                     (let [raw (js-execute driver (str "return " detect-captcha-js))]
                        (when raw (json/parse-string raw true))))
         captcha-type (keyword (or explicit-type (:type detected)))
         sitekey    (:sitekey detected)
         selector   (:selector opts)]
-    (when-not captcha-type
-      (throw (ex-info "No captcha type detected on page" {})))
-    (when (and (= captcha-type :image) (not selector))
-      (throw (ex-info "Image captcha requires :selector option" {})))
-    (let [submit-opts (cond-> {:type     captcha-type
-                               :api-key  (:api-key opts)
-                               :page-url page-url
-                               :user-agent user-agent
-                               :sitekey  sitekey}
-                        (= captcha-type :image)
-                        (assoc :image-base64 (screenshot-element-base64 driver selector)))
-          task-id (submit-captcha! submit-opts)]
-      (when-not task-id
-        (throw (ex-info "Failed to submit captcha to 2captcha" {})))
-      (let [solution (poll-result! (:api-key opts) task-id)]
-        (if solution
-          (if (= captcha-type :image)
-            {:ok (str "Image captcha solved: " solution)}
-            (do
-              (js-execute driver (inject-solution-js captcha-type solution))
-              {:ok (str "Captcha solved and injected (" (name captcha-type) ")")}))
-          {:error "Captcha solving timed out (120s)"})))))
+    (cond
+      (not captcha-type)
+      {:error "No captcha type detected on page"}
+
+      (and (= captcha-type :image) (not selector))
+      {:error "Image captcha requires :selector option"}
+
+      :else
+      (let [submit-opts (cond-> {:type     captcha-type
+                                 :api-key  (:api-key opts)
+                                 :page-url page-url
+                                 :user-agent user-agent
+                                 :sitekey  sitekey}
+                          (= captcha-type :image)
+                          (assoc :image-base64 (screenshot-element-base64 driver selector)))
+            task-id (submit-captcha! submit-opts)]
+        (if-not task-id
+          {:error "Failed to submit captcha to 2captcha"}
+          (let [solution (poll-result! (:api-key opts) task-id)]
+            (if solution
+              (if (= captcha-type :image)
+                {:ok (str "Image captcha solved: " solution)}
+                (do
+                  (js-execute driver (inject-solution-js captcha-type solution))
+                  {:ok (str "Captcha solved and injected (" (name captcha-type) ")")}))
+              {:error "Captcha solving timed out (120s)"})))))))
