@@ -1,5 +1,6 @@
 (ns browser-server-mcp.captcha-test
   (:require [clojure.test :refer [deftest is testing run-tests]]
+            [clojure.string :as str]
             [browser-server-mcp.captcha :as captcha]))
 
 (deftest test-build-submit-params
@@ -52,6 +53,25 @@
 
   (testing "returns nil for error"
     (is (nil? (captcha/parse-result-response "ERROR_CAPTCHA_UNSOLVABLE")))))
+
+(deftest test-detect-js
+  (testing "detect JS returns a string"
+    (is (string? captcha/detect-captcha-js))
+    (is (str/includes? captcha/detect-captcha-js "grecaptcha"))))
+
+(deftest test-inject-recaptcha-js
+  (testing "returns JS string with solution interpolated"
+    (let [js (captcha/inject-solution-js :recaptcha_v2 "token123")]
+      (is (string? js))
+      (is (str/includes? js "token123"))
+      (is (str/includes? js "g-recaptcha-response")))))
+
+(deftest test-inject-hcaptcha-js
+  (testing "returns JS string with solution interpolated"
+    (let [js (captcha/inject-solution-js :hcaptcha "token456")]
+      (is (string? js))
+      (is (str/includes? js "token456"))
+      (is (str/includes? js "h-captcha-response")))))
 
 (defn -main [& _args]
   (let [{:keys [fail error]} (run-tests 'browser-server-mcp.captcha-test)]
