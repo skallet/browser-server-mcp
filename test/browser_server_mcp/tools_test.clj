@@ -296,7 +296,7 @@
     (let [result (tools/call-tool driver "nonexistent" {})]
       (is (:isError result)))))
 
-(defn run [& _args]
-  (let [{:keys [fail error]} (run-tests)]
+(defn -main [& _args]
+  (let [{:keys [fail error]} (run-tests 'browser-server-mcp.tools-test)]
     (e/quit driver)
     (System/exit (if (zero? (+ fail error)) 0 1))))

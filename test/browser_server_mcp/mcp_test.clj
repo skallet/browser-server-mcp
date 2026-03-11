@@ -86,9 +86,6 @@
           session-id (get-in response [:headers "Mcp-Session-Id"])]
       (is (some? session-id)))))
 
-(defn run [& _args]
+(defn -main [& _args]
   (let [{:keys [fail error]} (run-tests 'browser-server-mcp.mcp-test)]
     (System/exit (if (zero? (+ fail error)) 0 1))))
-
-(defn -main [& args]
-  (apply run args))

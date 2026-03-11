@@ -50,6 +50,6 @@
       (is (= "http://127.0.0.1:8080/mcp"
              (get-in content ["mcpServers" "browser" "url"]))))))
 
-(defn run [& _args]
-  (let [{:keys [fail error]} (run-tests)]
+(defn -main [& _args]
+  (let [{:keys [fail error]} (run-tests 'browser-server-mcp.server-test)]
     (System/exit (if (zero? (+ fail error)) 0 1))))
