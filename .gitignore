@@ -1,0 +1,6 @@
+.browser-port
+.browser-pid
+.mcp.json
+.nrepl-port
+.cpcache/
+target/
