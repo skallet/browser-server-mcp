@@ -1,6 +1,8 @@
 (ns browser-server-mcp.captcha
   (:require [babashka.http-client :as http]
-            [clojure.string :as str]))
+            [cheshire.core :as json]
+            [clojure.string :as str])
+  (:import [java.util Base64]))
 
 (def ^:private submit-url "https://2captcha.com/in.php")
 (def ^:private result-url "https://2captcha.com/res.php")
@@ -182,3 +184,61 @@
      "})()")
 
     nil))
+
+;; --- Orchestrator ---
+
+(defn- screenshot-element-base64
+  "Screenshot a page element and return the base64-encoded PNG string.
+   Selector starting with / is treated as xpath, otherwise css."
+  [driver selector]
+  (let [query (if (str/starts-with? selector "/")
+                {:xpath selector}
+                {:css selector})
+        tmp-path (str (System/getProperty "java.io.tmpdir")
+                      "/captcha-" (System/currentTimeMillis) ".png")
+        screenshot-el-fn (resolve 'etaoin.api/screenshot-element)]
+    (screenshot-el-fn driver query tmp-path)
+    (let [file (java.io.File. tmp-path)
+          bytes (java.nio.file.Files/readAllBytes (.toPath file))
+          b64 (.encodeToString (Base64/getEncoder) bytes)]
+      (.delete file)
+      b64)))
+
+(defn solve-captcha!
+  "Orchestrate captcha solving: detect, submit to 2captcha, poll, inject.
+   opts: {:api-key str, :type str (optional), :selector str (optional)}"
+  [driver opts]
+  (require '[etaoin.api :as e])
+  (let [js-execute (resolve 'etaoin.api/js-execute)
+        get-url    (resolve 'etaoin.api/get-url)
+        page-url   (get-url driver)
+        user-agent (js-execute driver "return navigator.userAgent")
+        explicit-type (:type opts)
+        detected   (when (not= explicit-type "image")
+                     (let [raw (js-execute driver detect-captcha-js)]
+                       (when raw (json/parse-string raw true))))
+        captcha-type (keyword (or explicit-type (:type detected)))
+        sitekey    (:sitekey detected)
+        selector   (:selector opts)]
+    (when-not captcha-type
+      (throw (ex-info "No captcha type detected on page" {})))
+    (when (and (= captcha-type :image) (not selector))
+      (throw (ex-info "Image captcha requires :selector option" {})))
+    (let [submit-opts (cond-> {:type     captcha-type
+                               :api-key  (:api-key opts)
+                               :page-url page-url
+                               :user-agent user-agent
+                               :sitekey  sitekey}
+                        (= captcha-type :image)
+                        (assoc :image-base64 (screenshot-element-base64 driver selector)))
+          task-id (submit-captcha! submit-opts)]
+      (when-not task-id
+        (throw (ex-info "Failed to submit captcha to 2captcha" {})))
+      (let [solution (poll-result! (:api-key opts) task-id)]
+        (if solution
+          (if (= captcha-type :image)
+            {:ok (str "Image captcha solved: " solution)}
+            (do
+              (js-execute driver (inject-solution-js captcha-type solution))
+              {:ok (str "Captcha solved and injected (" (name captcha-type) ")")}))
+          {:error "Captcha solving timed out (120s)"})))))
