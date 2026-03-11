@@ -55,7 +55,7 @@
       (is (contains? tool-names "screenshot"))
       (is (contains? tool-names "click"))
       (is (contains? tool-names "page_text"))
-      (is (= 22 (count tools))))))
+      (is (= 23 (count tools))))))
 
 (deftest test-handle-unknown-method
   (testing "returns error for unknown method"

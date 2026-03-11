@@ -178,7 +178,14 @@
     :description "Execute JavaScript in the browser. Use 'return' to get a value back. This is the escape hatch for anything not covered by dedicated tools."
     :inputSchema {:type "object"
                   :properties {:script {:type "string" :description "JavaScript code to execute"}}
-                  :required ["script"]}}])
+                  :required ["script"]}}
+   {:name "solve_captcha"
+    :description "Solve a captcha on the current page using 2captcha.com. Auto-detects reCAPTCHA v2 and hCaptcha. For image captchas, provide the selector for the captcha image element. Returns the solution text for image captchas."
+    :inputSchema {:type "object"
+                  :properties {:api_key {:type "string" :description "2captcha.com API key"}
+                               :type {:type "string" :description "Captcha type: recaptcha_v2, hcaptcha, or image. Auto-detected if omitted."}
+                               :selector {:type "string" :description "CSS/XPath for image captcha element (required when type=image)"}}
+                  :required ["api_key"]}}])
 
 (defn- url+title [driver]
   (pr-str {:url (e/get-url driver) :title (e/get-title driver)}))
@@ -382,6 +389,17 @@
   (e/back driver)
   (success (url+title driver)))
 
+(defn- do-solve-captcha [driver args]
+  (require '[browser-server-mcp.captcha :as captcha])
+  (let [result ((resolve 'browser-server-mcp.captcha/solve-captcha!)
+                driver
+                {:api-key (:api_key args)
+                 :type (:type args)
+                 :selector (:selector args)})]
+    (if (:error result)
+      (error (:error result))
+      (success (:ok result)))))
+
 (def ^:private tool-handlers
   {"navigate"      do-navigate
    "back"          do-back
@@ -404,7 +422,8 @@
    "scroll"        do-scroll
    "screenshot"    do-screenshot
    "resize"        do-resize
-   "execute_js"    do-execute-js})
+   "execute_js"    do-execute-js
+   "solve_captcha" do-solve-captcha})
 
 (defn- with-timeout
   "Run f with a timeout in ms. Returns f's result, or an error map on timeout.
@@ -427,6 +446,7 @@
       (let [timeout (case tool-name
                       "navigate" navigate-timeout
                       "wait"     (+ (or (:timeout_ms arguments) 10000) 5000)
+                      "solve_captcha" 180000
                       default-timeout)]
         (with-timeout timeout #(handler driver arguments)))
       (catch Exception ex

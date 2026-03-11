@@ -5,9 +5,9 @@
             [browser-server-mcp.tools :as tools]))
 
 (deftest test-tool-schemas
-  (testing "returns 22 tool schemas"
+  (testing "returns 23 tool schemas"
     (let [schemas (tools/tool-schemas)]
-      (is (= 22 (count schemas)))))
+      (is (= 23 (count schemas)))))
 
   (testing "all schemas have required fields"
     (doseq [schema (tools/tool-schemas)]
