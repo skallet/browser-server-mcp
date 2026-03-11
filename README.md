@@ -1,6 +1,6 @@
 # browser-server-mcp
 
-Standalone browser MCP server for Claude Code. Provides 22 browser automation tools via Chrome/ChromeDriver.
+Standalone browser MCP server for Claude Code. Provides 23 browser automation tools via Chrome/ChromeDriver.
 
 ## Requirements
 
@@ -25,7 +25,7 @@ browser-server-mcp stop                   # stop running instance
 
 After `start`, launch Claude Code in the same directory — it reads `.mcp.json` automatically.
 
-## Tools (22)
+## Tools (23)
 
 **Navigation:** navigate, back, get_url, page_text, page_html
 **Discovery:** query, query_all
@@ -35,6 +35,19 @@ After `start`, launch Claude Code in the same directory — it reads `.mcp.json`
 **Waiting/Scrolling:** wait, scroll
 **Capture/Viewport:** screenshot, resize
 **Escape hatch:** execute_js
+**Captcha:** solve_captcha
+
+### solve_captcha
+
+Auto-detects and solves captchas on the current page via [2captcha.com](https://www.2captcha.com/), then injects the solution into the page. Supports reCAPTCHA v2, hCaptcha, and image captcha.
+
+Requires a 2captcha.com account and API key.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `api_key` | Yes | 2captcha.com API key |
+| `type` | No | `"recaptcha_v2"`, `"hcaptcha"`, or `"image"` (auto-detected if omitted) |
+| `selector` | No | CSS/XPath selector for the captcha image element (required when `type="image"`) |
 
 ## Development
 
