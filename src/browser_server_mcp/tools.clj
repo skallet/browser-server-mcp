@@ -72,9 +72,9 @@
 
 (def ^:private solve-captcha-schema
   {:name "solve_captcha"
-   :description "Solve a captcha on the current page using 2captcha.com. Auto-detects reCAPTCHA v2 and hCaptcha. For image captchas, provide the selector for the captcha image element. Returns the solution text for image captchas."
+   :description "Solve a captcha on the current page using 2captcha.com. Auto-detects reCAPTCHA v2, hCaptcha, and Cloudflare Turnstile. For image captchas, provide the selector for the captcha image element. Returns the solution text for image captchas."
    :inputSchema {:type "object"
-                 :properties {:type {:type "string" :description "Captcha type: recaptcha_v2, hcaptcha, or image. Auto-detected if omitted."}
+                 :properties {:type {:type "string" :description "Captcha type: recaptcha_v2, hcaptcha, turnstile, or image. Auto-detected if omitted."}
                               :selector {:type "string" :description "CSS/XPath for image captcha element (required when type=image)"}}}})
 
 (defn tool-schemas [server-config]

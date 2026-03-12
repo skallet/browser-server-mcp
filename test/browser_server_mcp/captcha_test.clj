@@ -26,6 +26,18 @@
       (is (= "site456" (get-in params [:form-params :sitekey])))
       (is (= "Mozilla/5.0" (get-in params [:form-params :userAgent])))))
 
+  (testing "builds turnstile params"
+    (let [params (captcha/build-submit-params
+                   {:type :turnstile
+                    :api-key "test-key"
+                    :sitekey "cf-site789"
+                    :page-url "https://example.com"
+                    :user-agent "Mozilla/5.0"})]
+      (is (= "turnstile" (get-in params [:form-params :method])))
+      (is (= "cf-site789" (get-in params [:form-params :sitekey])))
+      (is (= "https://example.com" (get-in params [:form-params :pageurl])))
+      (is (= "Mozilla/5.0" (get-in params [:form-params :userAgent])))))
+
   (testing "builds base64 image params"
     (let [params (captcha/build-submit-params
                    {:type :image
@@ -57,7 +69,11 @@
 (deftest test-detect-js
   (testing "detect JS returns a string"
     (is (string? captcha/detect-captcha-js))
-    (is (str/includes? captcha/detect-captcha-js "grecaptcha"))))
+    (is (str/includes? captcha/detect-captcha-js "grecaptcha")))
+
+  (testing "detect JS includes turnstile detection"
+    (is (str/includes? captcha/detect-captcha-js "cf-turnstile"))
+    (is (str/includes? captcha/detect-captcha-js "challenges.cloudflare.com"))))
 
 (deftest test-inject-recaptcha-js
   (testing "returns JS string with solution interpolated"
@@ -72,6 +88,13 @@
       (is (string? js))
       (is (str/includes? js "token456"))
       (is (str/includes? js "h-captcha-response")))))
+
+(deftest test-inject-turnstile-js
+  (testing "returns JS string with solution interpolated"
+    (let [js (captcha/inject-solution-js :turnstile "cf-token789")]
+      (is (string? js))
+      (is (str/includes? js "cf-token789"))
+      (is (str/includes? js "cf-turnstile-response")))))
 
 (defn -main [& _args]
   (let [{:keys [fail error]} (run-tests 'browser-server-mcp.captcha-test)]

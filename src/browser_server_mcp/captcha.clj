@@ -26,6 +26,14 @@
                  :pageurl page-url
                  :userAgent (or user-agent "")}})
 
+(defmethod build-submit-params :turnstile
+  [{:keys [api-key sitekey page-url user-agent]}]
+  {:form-params {:key api-key
+                 :method "turnstile"
+                 :sitekey sitekey
+                 :pageurl page-url
+                 :userAgent (or user-agent "")}})
+
 (defmethod build-submit-params :image
   [{:keys [api-key image-base64]}]
   {:form-params {:key api-key
@@ -125,6 +133,24 @@
    "      if (hm) return JSON.stringify({type:'hcaptcha', sitekey:hm[1]});"
    "    }"
    "  } catch(e) {}"
+   "  try {"
+   "    var tel = document.querySelector('.cf-turnstile[data-sitekey]');"
+   "    if (tel) return JSON.stringify({type:'turnstile', sitekey:tel.getAttribute('data-sitekey')});"
+   "  } catch(e) {}"
+   "  try {"
+   "    var tiframe = document.querySelector('iframe[src*=\"challenges.cloudflare.com\"]');"
+   "    if (tiframe) {"
+   "      var tm = tiframe.src.match(/[?&]sitekey=([^&]+)/);"
+   "      if (tm) return JSON.stringify({type:'turnstile', sitekey:tm[1]});"
+   "    }"
+   "  } catch(e) {}"
+   "  try {"
+   "    var tinput = document.querySelector('input[name=\"cf-turnstile-response\"]');"
+   "    if (tinput) {"
+   "      var tpar = tinput.closest('[data-sitekey]');"
+   "      if (tpar) return JSON.stringify({type:'turnstile', sitekey:tpar.getAttribute('data-sitekey')});"
+   "    }"
+   "  } catch(e) {}"
    "  return JSON.stringify({type:null, sitekey:null});"
    "})()"))
 
@@ -176,6 +202,36 @@
        "      if (cbName && typeof window[cbName] === 'function') {"
        "        window[cbName](sol);"
        "      }"
+       "    }"
+       "  } catch(e) {}"
+       "})()")
+
+      :turnstile
+      (str
+       "(function() {"
+       "  var sol = " safe ";"
+       "  var inp = document.querySelector('input[name=\"cf-turnstile-response\"]');"
+       "  if (inp) inp.value = sol;"
+       "  var gta = document.querySelector('textarea[name=\"g-recaptcha-response\"]');"
+       "  if (gta) gta.value = sol;"
+       "  try {"
+       "    var el = document.querySelector('.cf-turnstile[data-callback]');"
+       "    if (el) {"
+       "      var cbName = el.getAttribute('data-callback');"
+       "      if (cbName && typeof window[cbName] === 'function') {"
+       "        window[cbName](sol);"
+       "      }"
+       "    }"
+       "  } catch(e) {}"
+       "  try {"
+       "    if (typeof turnstile !== 'undefined' && turnstile.getResponse) {"
+       "      var widgets = document.querySelectorAll('.cf-turnstile');"
+       "      widgets.forEach(function(w) {"
+       "        var cbName = w.getAttribute('data-callback');"
+       "        if (cbName && typeof window[cbName] === 'function') {"
+       "          window[cbName](sol);"
+       "        }"
+       "      });"
        "    }"
        "  } catch(e) {}"
        "})()")
