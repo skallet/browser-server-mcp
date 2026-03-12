@@ -113,7 +113,10 @@
     (System/exit 1))
 
   (let [chrome-fn (resolve 'etaoin.api/chrome)
-        driver (if headless (chrome-fn {:headless true}) (chrome-fn))
+        chrome-opts (cond-> {:args ["--no-sandbox"]}
+                      headless (assoc :headless true)
+                      (System/getenv "CHROME_BINARY") (assoc :binary (System/getenv "CHROME_BINARY")))
+        driver (chrome-fn chrome-opts)
         resolved-captcha-key (or captcha-api-key (System/getenv "CAPTCHA_API_KEY"))
         server-opts (cond-> {:port port :host "127.0.0.1"}
                       resolved-captcha-key (assoc :captcha-api-key resolved-captcha-key))]
